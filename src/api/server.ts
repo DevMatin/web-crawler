@@ -7,16 +7,27 @@ import { saveToSupabase } from '../utils/supabase-storage.js';
 const app = express();
 app.use(express.json());
 
+const sharedConfig = new Configuration({
+    purgeOnStart: false,
+    defaultDatasetId: 'crawler-data',
+});
+
+let sharedDataset: Dataset | null = null;
+
+async function getSharedDataset(): Promise<Dataset> {
+    if (!sharedDataset) {
+        sharedDataset = await Dataset.open('crawler-data', { config: sharedConfig });
+    }
+    return sharedDataset;
+}
+
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 app.get('/api/stats', async (req, res) => {
     try {
-        const crawlerConfig = new Configuration({
-            purgeOnStart: false,
-        });
-        const dataset = await Dataset.open('crawler-data', { config: crawlerConfig });
+        const dataset = await getSharedDataset();
         const data = await dataset.getData();
         res.json({
             totalItems: data.items.length,
@@ -31,10 +42,7 @@ app.get('/api/stats', async (req, res) => {
 
 app.get('/api/data', async (req, res) => {
     try {
-        const crawlerConfig = new Configuration({
-            purgeOnStart: false,
-        });
-        const dataset = await Dataset.open('crawler-data', { config: crawlerConfig });
+        const dataset = await getSharedDataset();
         const data = await dataset.getData();
         const limit = parseInt(req.query.limit as string || '100', 10);
         const offset = parseInt(req.query.offset as string || '0', 10);
@@ -81,10 +89,8 @@ app.post('/api/crawl', async (req, res) => {
             try {
                 log.info('Crawling gestartet', { urls: startUrls, project_id: projectIdNum });
 
-                const crawlerConfig = new Configuration({
-                    purgeOnStart: false,
-                    defaultDatasetId: 'crawler-data',
-                });
+                const dataset = await getSharedDataset();
+                log.info('Dataset geöffnet', { datasetId: dataset.id });
 
                 const crawler = new CheerioCrawler({
                     requestHandler: router,
@@ -92,14 +98,11 @@ app.post('/api/crawl', async (req, res) => {
                     maxConcurrency: config.maxConcurrency,
                     requestHandlerTimeoutSecs: config.requestHandlerTimeoutSecs,
                     navigationTimeoutSecs: config.navigationTimeoutSecs,
-                }, crawlerConfig);
+                }, sharedConfig);
 
                 await crawler.run(startUrls);
 
-                const dataset = await crawler.getDataset();
                 const data = await dataset.getData();
-                
-                log.info('Dataset geöffnet', { datasetId: dataset.id });
 
                 log.info(`Crawling abgeschlossen. ${data.items.length} Einträge gefunden.`, {
                     project_id: projectIdNum,
