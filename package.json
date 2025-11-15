@@ -27,5 +27,11 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "resolutions": {
+    "figlet": "^1.7.0"
+  },
+  "overrides": {
+    "figlet": "^1.7.0"
   }
 }
