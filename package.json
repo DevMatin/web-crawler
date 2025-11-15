@@ -29,9 +29,11 @@
     "node": ">=18.0.0"
   },
   "resolutions": {
-    "figlet": "^1.7.0"
+    "figlet": "^1.7.0",
+    "devtools-protocol": "0.0.1545402"
   },
   "overrides": {
-    "figlet": "^1.7.0"
+    "figlet": "^1.7.0",
+    "devtools-protocol": "0.0.1545402"
   }
 }
