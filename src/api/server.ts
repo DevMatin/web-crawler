@@ -108,6 +108,72 @@ app.get('/api/crawl/status', async (req, res) => {
     }
 });
 
+app.post('/api/projects', async (req, res) => {
+    try {
+        const { name, domain } = req.body;
+
+        if (!name || !domain) {
+            return res.status(400).json({ error: 'name und domain sind erforderlich' });
+        }
+
+        const supabaseClient = getSupabaseClient();
+        
+        const { data, error } = await supabaseClient
+            .from('projects')
+            .insert({
+                name,
+                domain,
+            })
+            .select()
+            .single();
+
+        if (error) {
+            if (error.code === '23505') {
+                return res.status(409).json({ error: 'Domain existiert bereits' });
+            }
+            log.error('Fehler beim Anlegen des Projekts', { error });
+            return res.status(500).json({ error: 'Fehler beim Anlegen des Projekts' });
+        }
+
+        res.status(201).json({
+            success: true,
+            project: data,
+        });
+    } catch (error) {
+        log.error('Fehler im /api/projects Endpoint', { error });
+        res.status(500).json({
+            error: 'Fehler beim Anlegen des Projekts',
+            message: error instanceof Error ? error.message : 'Unknown error',
+        });
+    }
+});
+
+app.get('/api/projects', async (req, res) => {
+    try {
+        const supabaseClient = getSupabaseClient();
+        
+        const { data, error } = await supabaseClient
+            .from('projects')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            log.error('Fehler beim Abrufen der Projekte', { error });
+            return res.status(500).json({ error: 'Fehler beim Abrufen der Projekte' });
+        }
+
+        res.json({
+            projects: data || [],
+        });
+    } catch (error) {
+        log.error('Fehler im /api/projects GET Endpoint', { error });
+        res.status(500).json({
+            error: 'Fehler beim Abrufen der Projekte',
+            message: error instanceof Error ? error.message : 'Unknown error',
+        });
+    }
+});
+
 app.post('/api/crawl', async (req, res) => {
     try {
         const { url, urls, project_id, max_requests } = req.body;

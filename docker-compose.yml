@@ -20,12 +20,14 @@ services:
   api:
     build: .
     container_name: web-crawler-api
-    command: npm run start:api
+    command: node dist/api/server.js
     ports:
       - "3000:3000"
     environment:
       - PORT=3000
       - STORAGE_DIR=/app/storage
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
     volumes:
       - ./storage:/app/storage
     depends_on:
