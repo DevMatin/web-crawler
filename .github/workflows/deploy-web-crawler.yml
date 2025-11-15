@@ -5,9 +5,6 @@ on:
     branches:
       - main
       - master
-    paths:
-      - '**'
-      - '!.github/workflows/deploy.yml'
 
 jobs:
   deploy:
@@ -22,10 +19,9 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
           cd /opt/web-crawler
-          git pull origin main
+          git pull origin main || git pull origin master
           docker-compose pull || true
           docker-compose build
           docker-compose up -d
           docker-compose ps
           docker-compose logs --tail=50
-
