@@ -4,27 +4,9 @@ import { calculateContentHash } from './utils/content-hash.js';
 
 export const router = createCheerioRouter();
 
-router.addDefaultHandler(async ({ enqueueLinks, log, request }) => {
+router.addDefaultHandler(async ({ enqueueLinks, log, request, $, pushData }) => {
     log.info(`Seite gefunden: ${request.url}`);
     
-    try {
-        const url = new URL(request.url);
-        const currentDomain = url.hostname;
-        
-        const domainsToCrawl = config.allowedDomains.length > 0 
-            ? config.allowedDomains 
-            : [currentDomain];
-        
-        await enqueueLinks({
-            globs: domainsToCrawl.map(domain => `https://${domain}/**`),
-            label: 'detail',
-        });
-    } catch (error) {
-        log.warning(`Konnte Domain nicht extrahieren für ${request.url}`, { error });
-    }
-});
-
-router.addHandler('detail', async ({ request, $, log, pushData }) => {
     try {
         const url = request.loadedUrl || request.url;
         const title = $('title').text().trim();
@@ -58,13 +40,17 @@ router.addHandler('detail', async ({ request, $, log, pushData }) => {
 
         const baseUrl = new URL(url);
         const internalLinks: string[] = [];
+        const internalLinksWithAnchor: Array<{ url: string; anchor: string }> = [];
         $('a[href]').each((_, el) => {
             const href = $(el).attr('href');
             if (href) {
                 try {
                     const linkUrl = new URL(href, url);
                     if (linkUrl.hostname === baseUrl.hostname) {
-                        internalLinks.push(linkUrl.toString());
+                        const linkUrlString = linkUrl.toString();
+                        internalLinks.push(linkUrlString);
+                        const anchor = $(el).text().trim() || '';
+                        internalLinksWithAnchor.push({ url: linkUrlString, anchor });
                     }
                 } catch {
                     // Ignore invalid URLs
@@ -80,6 +66,14 @@ router.addHandler('detail', async ({ request, $, log, pushData }) => {
             images_count: imagesCount,
         };
 
+        const uniqueLinks = [...new Set(internalLinks)];
+        const linksMap = new Map<string, string>();
+        internalLinksWithAnchor.forEach(({ url: linkUrl, anchor }) => {
+            if (!linksMap.has(linkUrl) || (anchor && !linksMap.get(linkUrl))) {
+                linksMap.set(linkUrl, anchor);
+            }
+        });
+
         const content = {
             url,
             title,
@@ -87,14 +81,24 @@ router.addHandler('detail', async ({ request, $, log, pushData }) => {
             crawled_at: new Date().toISOString(),
             technical_data: technicalData,
             semantic_data: {},
-            internal_links: [...new Set(internalLinks)],
+            internal_links: uniqueLinks,
+            internal_links_with_anchor: Array.from(linksMap.entries()).map(([url, anchor]) => ({ url, anchor })),
         };
 
         await pushData(content);
         log.info(`Daten extrahiert: ${title}`, { url });
+
+        const currentDomain = baseUrl.hostname;
+        const domainsToCrawl = config.allowedDomains.length > 0 
+            ? config.allowedDomains 
+            : [currentDomain];
+        
+        await enqueueLinks({
+            selector: 'a[href]',
+            globs: domainsToCrawl.map(domain => `https://${domain}/**`),
+        });
     } catch (error) {
-        log.error(`Fehler beim Verarbeiten von ${request.url}`, { error });
-        throw error;
+        log.warning(`Konnte Domain nicht extrahieren für ${request.url}`, { error });
     }
 });
 

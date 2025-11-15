@@ -3,20 +3,22 @@ import { Dataset, CheerioCrawler, log, Configuration } from 'crawlee';
 import { config } from '../config.js';
 import { router } from '../routes.js';
 import { saveToSupabase } from '../utils/supabase-storage.js';
+import { readDatasetFromFilesystem } from '../utils/dataset-reader.js';
 
 const app = express();
 app.use(express.json());
 
-const sharedConfig = new Configuration({
-    purgeOnStart: false,
-    defaultDatasetId: 'crawler-data',
-});
+Configuration.getGlobalConfig().set('purgeOnStart', false);
+
+if (config.storageDir) {
+    process.env.CRAWLEE_STORAGE_DIR = config.storageDir;
+}
 
 let sharedDataset: Dataset | null = null;
 
 async function getSharedDataset(): Promise<Dataset> {
     if (!sharedDataset) {
-        sharedDataset = await Dataset.open('crawler-data', { config: sharedConfig });
+        sharedDataset = await Dataset.open();
     }
     return sharedDataset;
 }
@@ -27,12 +29,12 @@ app.get('/health', (req, res) => {
 
 app.get('/api/stats', async (req, res) => {
     try {
-        const dataset = await getSharedDataset();
-        const data = await dataset.getData();
+        const data = await readDatasetFromFilesystem();
+        log.info('Stats abgerufen', { items: data.items.length, total: data.total });
         res.json({
             totalItems: data.items.length,
             totalRequests: data.total,
-            datasetId: dataset.id,
+            datasetId: 'default',
         });
     } catch (error) {
         log.error('Fehler beim Abrufen der Statistiken', { error });
@@ -42,8 +44,7 @@ app.get('/api/stats', async (req, res) => {
 
 app.get('/api/data', async (req, res) => {
     try {
-        const dataset = await getSharedDataset();
-        const data = await dataset.getData();
+        const data = await readDatasetFromFilesystem();
         const limit = parseInt(req.query.limit as string || '100', 10);
         const offset = parseInt(req.query.offset as string || '0', 10);
         
@@ -89,20 +90,20 @@ app.post('/api/crawl', async (req, res) => {
             try {
                 log.info('Crawling gestartet', { urls: startUrls, project_id: projectIdNum });
 
-                const dataset = await getSharedDataset();
-                log.info('Dataset geöffnet', { datasetId: dataset.id });
-
                 const crawler = new CheerioCrawler({
                     requestHandler: router,
                     maxRequestsPerCrawl: maxRequests,
                     maxConcurrency: config.maxConcurrency,
                     requestHandlerTimeoutSecs: config.requestHandlerTimeoutSecs,
                     navigationTimeoutSecs: config.navigationTimeoutSecs,
-                }, sharedConfig);
+                });
 
                 await crawler.run(startUrls);
 
+                const dataset = await crawler.getDataset();
                 const data = await dataset.getData();
+                
+                log.info('Dataset geöffnet', { datasetId: dataset.id });
 
                 log.info(`Crawling abgeschlossen. ${data.items.length} Einträge gefunden.`, {
                     project_id: projectIdNum,

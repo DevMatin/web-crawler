@@ -15,6 +15,7 @@ export interface CrawledItem {
     };
     semantic_data: Record<string, unknown>;
     internal_links: string[];
+    internal_links_with_anchor?: Array<{ url: string; anchor: string }>;
 }
 
 export async function saveToSupabase(
@@ -23,7 +24,8 @@ export async function saveToSupabase(
 ): Promise<{ success: boolean; error?: string }> {
     try {
         const supabaseClient = getSupabaseClient();
-        const { error } = await supabaseClient
+        
+        const { data: pageData, error: pageError } = await supabaseClient
             .from('pages')
             .upsert(
                 {
@@ -40,14 +42,67 @@ export async function saveToSupabase(
                 {
                     onConflict: 'url,project_id',
                 }
-            );
+            )
+            .select('id')
+            .single();
 
-        if (error) {
-            log.error(`Supabase Fehler für ${item.url}`, { error });
-            return { success: false, error: error.message };
+        if (pageError) {
+            log.error(`Supabase Fehler für ${item.url}`, { error: pageError });
+            return { success: false, error: pageError.message };
         }
 
-        log.info(`Gespeichert in Supabase: ${item.url}`, { projectId });
+        if (!pageData?.id) {
+            const { data: existingPage } = await supabaseClient
+                .from('pages')
+                .select('id')
+                .eq('project_id', projectId)
+                .eq('url', item.url)
+                .single();
+            
+            if (!existingPage?.id) {
+                log.error(`Konnte page ID nicht finden für ${item.url}`);
+                return { success: false, error: 'Page ID nicht gefunden' };
+            }
+            pageData.id = existingPage.id;
+        }
+
+        if (item.internal_links_with_anchor && item.internal_links_with_anchor.length > 0) {
+            const linkInserts = [];
+            
+            for (const link of item.internal_links_with_anchor) {
+                const { data: toPage } = await supabaseClient
+                    .from('pages')
+                    .select('id')
+                    .eq('project_id', projectId)
+                    .eq('url', link.url)
+                    .single();
+
+                linkInserts.push({
+                    project_id: projectId,
+                    from_page: pageData.id,
+                    to_page: toPage?.id || null,
+                    anchor: link.anchor || null,
+                });
+            }
+
+            if (linkInserts.length > 0) {
+                for (const linkInsert of linkInserts) {
+                    const { error: linksError } = await supabaseClient
+                        .from('internal_links')
+                        .insert(linkInsert);
+
+                    if (linksError) {
+                        if (linksError.code === '23505') {
+                            // Duplikat - ignorieren
+                        } else {
+                            log.warning(`Fehler beim Speichern eines internal_link für ${item.url}`, { error: linksError });
+                        }
+                    }
+                }
+            }
+        }
+
+        log.info(`Gespeichert in Supabase: ${item.url}`, { projectId, pageId: pageData.id });
         return { success: true };
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
