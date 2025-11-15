@@ -67,6 +67,16 @@ export async function saveToSupabase(
         }
 
         if (item.internal_links_with_anchor && item.internal_links_with_anchor.length > 0) {
+            const { error: deleteError } = await supabaseClient
+                .from('internal_links')
+                .delete()
+                .eq('project_id', projectId)
+                .eq('from_page', pageData.id);
+
+            if (deleteError) {
+                log.warning(`Fehler beim Löschen alter internal_links für ${item.url}`, { error: deleteError });
+            }
+
             const linkInserts = [];
             
             for (const link of item.internal_links_with_anchor) {
@@ -86,18 +96,12 @@ export async function saveToSupabase(
             }
 
             if (linkInserts.length > 0) {
-                for (const linkInsert of linkInserts) {
-                    const { error: linksError } = await supabaseClient
-                        .from('internal_links')
-                        .insert(linkInsert);
+                const { error: linksError } = await supabaseClient
+                    .from('internal_links')
+                    .insert(linkInserts);
 
-                    if (linksError) {
-                        if (linksError.code === '23505') {
-                            // Duplikat - ignorieren
-                        } else {
-                            log.warning(`Fehler beim Speichern eines internal_link für ${item.url}`, { error: linksError });
-                        }
-                    }
+                if (linksError) {
+                    log.warning(`Fehler beim Speichern der internal_links für ${item.url}`, { error: linksError });
                 }
             }
         }
