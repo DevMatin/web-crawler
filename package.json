@@ -30,10 +30,10 @@
   },
   "resolutions": {
     "figlet": "^1.7.0",
-    "devtools-protocol": "0.0.1545402"
+    "devtools-protocol": "*"
   },
   "overrides": {
     "figlet": "^1.7.0",
-    "devtools-protocol": "0.0.1545402"
+    "devtools-protocol": "*"
   }
 }
