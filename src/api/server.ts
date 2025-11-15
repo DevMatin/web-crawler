@@ -16,7 +16,7 @@ app.get('/api/stats', async (req, res) => {
         const crawlerConfig = new Configuration({
             purgeOnStart: false,
         });
-        const dataset = await Dataset.open(null, { config: crawlerConfig });
+        const dataset = await Dataset.open('crawler-data', { config: crawlerConfig });
         const data = await dataset.getData();
         res.json({
             totalItems: data.items.length,
@@ -34,7 +34,7 @@ app.get('/api/data', async (req, res) => {
         const crawlerConfig = new Configuration({
             purgeOnStart: false,
         });
-        const dataset = await Dataset.open(null, { config: crawlerConfig });
+        const dataset = await Dataset.open('crawler-data', { config: crawlerConfig });
         const data = await dataset.getData();
         const limit = parseInt(req.query.limit as string || '100', 10);
         const offset = parseInt(req.query.offset as string || '0', 10);
@@ -83,12 +83,8 @@ app.post('/api/crawl', async (req, res) => {
 
                 const crawlerConfig = new Configuration({
                     purgeOnStart: false,
+                    defaultDatasetId: 'crawler-data',
                 });
-
-                const dataset = await Dataset.open<import('../utils/supabase-storage.js').CrawledItem>(null, {
-                    config: crawlerConfig,
-                });
-                log.info('Dataset geöffnet', { datasetId: dataset.id });
 
                 const crawler = new CheerioCrawler({
                     requestHandler: router,
@@ -100,7 +96,10 @@ app.post('/api/crawl', async (req, res) => {
 
                 await crawler.run(startUrls);
 
+                const dataset = await crawler.getDataset();
                 const data = await dataset.getData();
+                
+                log.info('Dataset geöffnet', { datasetId: dataset.id });
 
                 log.info(`Crawling abgeschlossen. ${data.items.length} Einträge gefunden.`, {
                     project_id: projectIdNum,
@@ -109,7 +108,7 @@ app.post('/api/crawl', async (req, res) => {
 
                 if (data.items.length > 0) {
                     for (const item of data.items) {
-                        const result = await saveToSupabase(item, projectIdNum);
+                        const result = await saveToSupabase(item as import('../utils/supabase-storage.js').CrawledItem, projectIdNum);
                         if (!result.success) {
                             log.error(`Fehler beim Speichern von ${item.url}`, { error: result.error });
                         }
