@@ -50,6 +50,11 @@ app.post('/api/crawl', async (req, res) => {
             return res.status(400).json({ error: 'project_id ist erforderlich' });
         }
 
+        const projectIdNum = typeof project_id === 'string' ? parseInt(project_id, 10) : project_id;
+        if (isNaN(projectIdNum)) {
+            return res.status(400).json({ error: 'project_id muss eine Zahl sein' });
+        }
+
         const startUrls = urls || (url ? [url] : []);
         if (startUrls.length === 0) {
             return res.status(400).json({ error: 'url oder urls ist erforderlich' });
@@ -61,12 +66,12 @@ app.post('/api/crawl', async (req, res) => {
             status: 'accepted',
             url: startUrls[0],
             urls: startUrls,
-            project_id,
+            project_id: projectIdNum,
         });
 
         (async () => {
             try {
-                log.info('Crawling gestartet', { urls: startUrls, project_id });
+                log.info('Crawling gestartet', { urls: startUrls, project_id: projectIdNum });
 
                 const crawler = new CheerioCrawler({
                     requestHandler: router,
@@ -82,16 +87,25 @@ app.post('/api/crawl', async (req, res) => {
                 const data = await dataset.getData();
 
                 log.info(`Crawling abgeschlossen. ${data.items.length} Einträge gefunden.`, {
-                    project_id,
+                    project_id: projectIdNum,
                 });
 
-                for (const item of data.items) {
-                    await saveToSupabase(item, project_id);
+                if (data.items.length > 0) {
+                    for (const item of data.items) {
+                        const result = await saveToSupabase(item, projectIdNum);
+                        if (!result.success) {
+                            log.error(`Fehler beim Speichern von ${item.url}`, { error: result.error });
+                        }
+                    }
+                    log.info('Alle Daten in Supabase gespeichert', { project_id: projectIdNum });
+                } else {
+                    log.warning('Keine Daten zum Speichern gefunden', { project_id: projectIdNum });
                 }
-
-                log.info('Alle Daten in Supabase gespeichert', { project_id });
             } catch (error) {
-                log.error('Fehler beim asynchronen Crawling', { error });
+                log.error('Fehler beim asynchronen Crawling', { 
+                    error: error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined
+                });
             }
         })();
     } catch (error) {
