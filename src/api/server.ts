@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { router } from '../routes.js';
 import { saveToSupabase } from '../utils/supabase-storage.js';
 import { readDatasetFromFilesystem } from '../utils/dataset-reader.js';
+import { getSupabaseClient } from './supabase.js';
 
 const app = express();
 app.use(express.json());
@@ -56,6 +57,54 @@ app.get('/api/data', async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ error: 'Fehler beim Abrufen der Daten' });
+    }
+});
+
+app.get('/api/crawl/status', async (req, res) => {
+    try {
+        const projectId = req.query.project_id;
+        
+        if (!projectId) {
+            return res.status(400).json({ error: 'project_id ist erforderlich' });
+        }
+
+        const projectIdNum = typeof projectId === 'string' ? parseInt(projectId, 10) : Number(projectId);
+        if (isNaN(projectIdNum)) {
+            return res.status(400).json({ error: 'project_id muss eine Zahl sein' });
+        }
+
+        const supabaseClient = getSupabaseClient();
+        
+        const { count, error } = await supabaseClient
+            .from('pages')
+            .select('*', { count: 'exact', head: true })
+            .eq('project_id', projectIdNum);
+
+        if (error) {
+            log.error('Fehler beim Abrufen des Status', { error });
+            return res.status(500).json({ error: 'Fehler beim Abrufen des Status' });
+        }
+
+        const { data: recentPages } = await supabaseClient
+            .from('pages')
+            .select('crawled_at')
+            .eq('project_id', projectIdNum)
+            .order('crawled_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        res.json({
+            project_id: projectIdNum,
+            total_pages: count || 0,
+            last_crawled_at: recentPages?.crawled_at || null,
+            status: count && count > 0 ? 'completed' : 'pending'
+        });
+    } catch (error) {
+        log.error('Fehler im /api/crawl/status Endpoint', { error });
+        res.status(500).json({
+            error: 'Fehler beim Abrufen des Status',
+            message: error instanceof Error ? error.message : 'Unknown error',
+        });
     }
 });
 
