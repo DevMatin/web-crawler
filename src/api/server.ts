@@ -1,5 +1,5 @@
 import express from 'express';
-import { Dataset, CheerioCrawler, log } from 'crawlee';
+import { Dataset, CheerioCrawler, log, Configuration } from 'crawlee';
 import { config } from '../config.js';
 import { router } from '../routes.js';
 import { saveToSupabase } from '../utils/supabase-storage.js';
@@ -13,7 +13,10 @@ app.get('/health', (req, res) => {
 
 app.get('/api/stats', async (req, res) => {
     try {
-        const dataset = await Dataset.open();
+        const crawlerConfig = new Configuration({
+            purgeOnStart: false,
+        });
+        const dataset = await Dataset.open(null, { config: crawlerConfig });
         const data = await dataset.getData();
         res.json({
             totalItems: data.items.length,
@@ -28,7 +31,10 @@ app.get('/api/stats', async (req, res) => {
 
 app.get('/api/data', async (req, res) => {
     try {
-        const dataset = await Dataset.open();
+        const crawlerConfig = new Configuration({
+            purgeOnStart: false,
+        });
+        const dataset = await Dataset.open(null, { config: crawlerConfig });
         const data = await dataset.getData();
         const limit = parseInt(req.query.limit as string || '100', 10);
         const offset = parseInt(req.query.offset as string || '0', 10);
@@ -75,7 +81,13 @@ app.post('/api/crawl', async (req, res) => {
             try {
                 log.info('Crawling gestartet', { urls: startUrls, project_id: projectIdNum });
 
-                const dataset = await Dataset.open<import('../utils/supabase-storage.js').CrawledItem>();
+                const crawlerConfig = new Configuration({
+                    purgeOnStart: false,
+                });
+
+                const dataset = await Dataset.open<import('../utils/supabase-storage.js').CrawledItem>(null, {
+                    config: crawlerConfig,
+                });
                 log.info('Dataset geöffnet', { datasetId: dataset.id });
 
                 const crawler = new CheerioCrawler({
@@ -84,7 +96,7 @@ app.post('/api/crawl', async (req, res) => {
                     maxConcurrency: config.maxConcurrency,
                     requestHandlerTimeoutSecs: config.requestHandlerTimeoutSecs,
                     navigationTimeoutSecs: config.navigationTimeoutSecs,
-                });
+                }, crawlerConfig);
 
                 await crawler.run(startUrls);
 
