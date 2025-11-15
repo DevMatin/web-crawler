@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  crawler:
+    build: .
+    container_name: web-crawler
+    environment:
+      - START_URLS=${START_URLS:-https://crawlee.dev}
+      - ALLOWED_DOMAINS=${ALLOWED_DOMAINS:-crawlee.dev}
+      - MAX_REQUESTS_PER_CRAWL=${MAX_REQUESTS_PER_CRAWL:-100}
+      - MAX_CONCURRENCY=${MAX_CONCURRENCY:-10}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - STORAGE_DIR=/app/storage
+    volumes:
+      - ./storage:/app/storage
+    restart: unless-stopped
+    networks:
+      - crawler-network
+
+  api:
+    build: .
+    container_name: web-crawler-api
+    command: npm run start:api
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - STORAGE_DIR=/app/storage
+    volumes:
+      - ./storage:/app/storage
+    depends_on:
+      - crawler
+    restart: unless-stopped
+    networks:
+      - crawler-network
+
+networks:
+  crawler-network:
+    driver: bridge
+
