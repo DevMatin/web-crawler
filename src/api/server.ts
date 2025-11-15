@@ -18,8 +18,10 @@ app.get('/api/stats', async (req, res) => {
         res.json({
             totalItems: data.items.length,
             totalRequests: data.total,
+            datasetId: dataset.id,
         });
     } catch (error) {
+        log.error('Fehler beim Abrufen der Statistiken', { error });
         res.status(500).json({ error: 'Fehler beim Abrufen der Statistiken' });
     }
 });
@@ -73,6 +75,9 @@ app.post('/api/crawl', async (req, res) => {
             try {
                 log.info('Crawling gestartet', { urls: startUrls, project_id: projectIdNum });
 
+                const dataset = await Dataset.open<import('../utils/supabase-storage.js').CrawledItem>();
+                log.info('Dataset geöffnet', { datasetId: dataset.id });
+
                 const crawler = new CheerioCrawler({
                     requestHandler: router,
                     maxRequestsPerCrawl: maxRequests,
@@ -83,11 +88,11 @@ app.post('/api/crawl', async (req, res) => {
 
                 await crawler.run(startUrls);
 
-                const dataset = await Dataset.open<import('../utils/supabase-storage.js').CrawledItem>();
                 const data = await dataset.getData();
 
                 log.info(`Crawling abgeschlossen. ${data.items.length} Einträge gefunden.`, {
                     project_id: projectIdNum,
+                    datasetId: dataset.id,
                 });
 
                 if (data.items.length > 0) {
