@@ -4,7 +4,16 @@ services:
   crawler:
     build: .
     container_name: web-crawler
-    command: sh -c "if [ -n \"$$START_URLS\" ]; then node dist/main.js; else echo 'Crawler Service: START_URLS nicht gesetzt, überspringe direkten Crawl. Verwende API-Server.'; sleep infinity; fi"
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$$START_URLS" ]; then
+          node dist/main.js
+        else
+          echo "Crawler Service: START_URLS nicht gesetzt, überspringe direkten Crawl. Verwende API-Server."
+          sleep infinity
+        fi
     environment:
       - START_URLS=${START_URLS:-}
       - ALLOWED_DOMAINS=${ALLOWED_DOMAINS:-}
