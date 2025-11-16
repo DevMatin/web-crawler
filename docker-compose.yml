@@ -4,6 +4,7 @@ services:
   crawler:
     build: .
     container_name: web-crawler
+    command: sh -c "if [ -n \"$$START_URLS\" ]; then node dist/main.js; else echo 'Crawler Service: START_URLS nicht gesetzt, überspringe direkten Crawl. Verwende API-Server.'; sleep infinity; fi"
     environment:
       - START_URLS=${START_URLS:-}
       - ALLOWED_DOMAINS=${ALLOWED_DOMAINS:-}
@@ -30,8 +31,6 @@ services:
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
     volumes:
       - ./storage:/app/storage
-    depends_on:
-      - crawler
     restart: unless-stopped
     networks:
       - crawler-network
