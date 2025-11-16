@@ -135,23 +135,40 @@ app.post('/api/projects', async (req, res) => {
             return res.status(400).json({ error: 'name und domain sind erforderlich' });
         }
 
+        let normalizedDomain = domain.trim();
+        
+        try {
+            const url = new URL(normalizedDomain.startsWith('http') ? normalizedDomain : `https://${normalizedDomain}`);
+            normalizedDomain = url.hostname;
+        } catch {
+            normalizedDomain = normalizedDomain.replace(/^https?:\/\//, '').replace(/\/$/, '').split('/')[0];
+        }
+
         const supabaseClient = getSupabaseClient();
         
         const { data, error } = await supabaseClient
             .from('projects')
             .insert({
                 name,
-                domain,
+                domain: normalizedDomain,
             })
             .select()
             .single();
 
         if (error) {
             if (error.code === '23505') {
-                return res.status(409).json({ error: 'Domain existiert bereits' });
+                log.warning('Domain existiert bereits', { domain: normalizedDomain, error });
+                return res.status(409).json({ 
+                    error: 'Domain existiert bereits',
+                    domain: normalizedDomain,
+                    hint: 'Prüfe bestehende Projekte mit GET /api/projects'
+                });
             }
-            log.error('Fehler beim Anlegen des Projekts', { error });
-            return res.status(500).json({ error: 'Fehler beim Anlegen des Projekts' });
+            log.error('Fehler beim Anlegen des Projekts', { error, domain: normalizedDomain });
+            return res.status(500).json({ 
+                error: 'Fehler beim Anlegen des Projekts',
+                details: error.message 
+            });
         }
 
         res.status(201).json({
