@@ -97,18 +97,13 @@ app.get('/api/crawl/status', async (req, res) => {
 
         const isRunning = runningCrawls.has(projectIdNum);
         const lastCrawledAt = recentPages?.crawled_at ? new Date(recentPages.crawled_at) : null;
-        const now = new Date();
         
         let status: 'pending' | 'running' | 'completed' = 'pending';
         
         if (isRunning) {
             status = 'running';
         } else if (count && count > 0) {
-            if (lastCrawledAt && (now.getTime() - lastCrawledAt.getTime()) < 300000) {
-                status = 'running';
-            } else {
-                status = 'completed';
-            }
+            status = 'completed';
         }
 
         res.json({
@@ -223,10 +218,19 @@ app.post('/api/crawl', async (req, res) => {
             return res.status(400).json({ error: 'project_id muss eine Zahl sein' });
         }
 
-        const startUrls = urls || (url ? [url] : []);
+        let startUrls = urls || (url ? [url] : []);
         if (startUrls.length === 0) {
             return res.status(400).json({ error: 'url oder urls ist erforderlich' });
         }
+
+        startUrls = startUrls.map((u: string) => {
+            if (!u) return u;
+            const trimmed = u.trim();
+            if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+                return trimmed;
+            }
+            return `https://${trimmed}`;
+        });
 
         const maxRequests = max_requests ? Number(max_requests) : config.maxRequestsPerCrawl;
 
