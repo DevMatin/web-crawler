@@ -93,9 +93,12 @@ router.addDefaultHandler(async ({ enqueueLinks, log, request, $, pushData }) => 
             ? config.allowedDomains 
             : [currentDomain];
         
+        log.info(`Enqueue Links für Domain: ${currentDomain}`, { domainsToCrawl });
+        
         await enqueueLinks({
             selector: 'a[href]',
-            globs: domainsToCrawl.map(domain => `https://${domain}/**`),
+            baseUrl: url,
+            label: 'default',
         });
     } catch (error) {
         log.warning(`Konnte Domain nicht extrahieren für ${request.url}`, { error });
