@@ -3,8 +3,8 @@ import { config as dotenvConfig } from 'dotenv';
 dotenvConfig();
 
 export const config = {
-    startUrls: process.env.START_URLS?.split(',') || ['https://crawlee.dev'],
-    allowedDomains: process.env.ALLOWED_DOMAINS?.split(',') || ['crawlee.dev'],
+    startUrls: process.env.START_URLS ? process.env.START_URLS.split(',').filter(url => url.trim()) : [],
+    allowedDomains: process.env.ALLOWED_DOMAINS ? process.env.ALLOWED_DOMAINS.split(',').filter(domain => domain.trim()) : [],
     maxRequestsPerCrawl: parseInt(process.env.MAX_REQUESTS_PER_CRAWL || '100', 10),
     maxConcurrency: parseInt(process.env.MAX_CONCURRENCY || '10', 10),
     requestHandlerTimeoutSecs: parseInt(process.env.REQUEST_HANDLER_TIMEOUT_SECS || '60', 10),

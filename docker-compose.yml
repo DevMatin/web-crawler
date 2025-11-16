@@ -5,8 +5,8 @@ services:
     build: .
     container_name: web-crawler
     environment:
-      - START_URLS=${START_URLS:-https://crawlee.dev}
-      - ALLOWED_DOMAINS=${ALLOWED_DOMAINS:-crawlee.dev}
+      - START_URLS=${START_URLS:-}
+      - ALLOWED_DOMAINS=${ALLOWED_DOMAINS:-}
       - MAX_REQUESTS_PER_CRAWL=${MAX_REQUESTS_PER_CRAWL:-100}
       - MAX_CONCURRENCY=${MAX_CONCURRENCY:-10}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
