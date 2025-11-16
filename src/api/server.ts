@@ -228,7 +228,7 @@ app.post('/api/crawl', async (req, res) => {
             return res.status(400).json({ error: 'url oder urls ist erforderlich' });
         }
 
-        const maxRequests = max_requests || config.maxRequestsPerCrawl;
+        const maxRequests = max_requests ? Number(max_requests) : config.maxRequestsPerCrawl;
 
         res.status(202).json({
             status: 'accepted',
