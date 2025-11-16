@@ -1,5 +1,5 @@
 import express from 'express';
-import { Dataset, CheerioCrawler, log, Configuration } from 'crawlee';
+import { Dataset, CheerioCrawler, log, Configuration, RequestQueue } from 'crawlee';
 import { config } from '../config.js';
 import { router } from '../routes.js';
 import { saveToSupabase } from '../utils/supabase-storage.js';
@@ -9,7 +9,7 @@ import { getSupabaseClient } from './supabase.js';
 const app = express();
 app.use(express.json());
 
-Configuration.getGlobalConfig().set('purgeOnStart', false);
+Configuration.getGlobalConfig().set('purgeOnStart', true);
 
 if (config.storageDir) {
     process.env.CRAWLEE_STORAGE_DIR = config.storageDir;
@@ -243,6 +243,14 @@ app.post('/api/crawl', async (req, res) => {
             try {
                 log.info('Crawling gestartet', { urls: startUrls, project_id: projectIdNum });
 
+                const requestQueue = await RequestQueue.open();
+                await requestQueue.drop();
+                log.info('Request Queue gelöscht');
+
+                const oldDataset = await Dataset.open();
+                await oldDataset.drop();
+                log.info('Dataset gelöscht');
+
                 const crawler = new CheerioCrawler({
                     requestHandler: router,
                     maxRequestsPerCrawl: maxRequests,
@@ -256,7 +264,7 @@ app.post('/api/crawl', async (req, res) => {
                 const dataset = await crawler.getDataset();
                 const data = await dataset.getData();
                 
-                log.info('Dataset geöffnet', { datasetId: dataset.id });
+                log.info('Dataset geöffnet', { datasetId: dataset.id, itemsCount: data.items.length });
 
                 log.info(`Crawling abgeschlossen. ${data.items.length} Einträge gefunden.`, {
                     project_id: projectIdNum,
@@ -271,6 +279,9 @@ app.post('/api/crawl', async (req, res) => {
                         }
                     }
                     log.info('Alle Daten in Supabase gespeichert', { project_id: projectIdNum });
+                    
+                    await dataset.drop();
+                    log.info('Dataset nach Speicherung gelöscht');
                 } else {
                     log.warning('Keine Daten zum Speichern gefunden', { project_id: projectIdNum });
                 }

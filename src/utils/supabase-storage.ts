@@ -67,6 +67,11 @@ export async function saveToSupabase(
         }
 
         if (item.internal_links_with_anchor && item.internal_links_with_anchor.length > 0) {
+            log.info(`Speichere ${item.internal_links_with_anchor.length} internal_links für Projekt ${projectId}`, {
+                from_page_id: pageData.id,
+                from_url: item.url
+            });
+
             const { error: deleteError } = await supabaseClient
                 .from('internal_links')
                 .delete()
@@ -80,28 +85,52 @@ export async function saveToSupabase(
             const linkInserts = [];
             
             for (const link of item.internal_links_with_anchor) {
-                const { data: toPage } = await supabaseClient
+                const { data: toPage, error: toPageError } = await supabaseClient
                     .from('pages')
-                    .select('id')
+                    .select('id, project_id')
                     .eq('project_id', projectId)
                     .eq('url', link.url)
-                    .single();
+                    .maybeSingle();
 
-                linkInserts.push({
-                    project_id: projectId,
-                    from_page: pageData.id,
-                    to_page: toPage?.id || null,
-                    anchor: link.anchor || null,
-                });
+                if (toPageError && toPageError.code !== 'PGRST116') {
+                    log.warning(`Fehler beim Suchen nach to_page für ${link.url}`, { error: toPageError });
+                }
+
+                if (toPage && toPage.project_id === projectId) {
+                    linkInserts.push({
+                        project_id: projectId,
+                        from_page: pageData.id,
+                        to_page: toPage.id,
+                        anchor: link.anchor || null,
+                    });
+                } else {
+                    log.debug(`to_page nicht gefunden für ${link.url} in Projekt ${projectId}, Link wird ohne to_page gespeichert`);
+                    linkInserts.push({
+                        project_id: projectId,
+                        from_page: pageData.id,
+                        to_page: null,
+                        anchor: link.anchor || null,
+                    });
+                }
             }
 
             if (linkInserts.length > 0) {
-                const { error: linksError } = await supabaseClient
+                const { data: insertedLinks, error: linksError } = await supabaseClient
                     .from('internal_links')
-                    .insert(linkInserts);
+                    .insert(linkInserts)
+                    .select();
 
                 if (linksError) {
-                    log.warning(`Fehler beim Speichern der internal_links für ${item.url}`, { error: linksError });
+                    log.warning(`Fehler beim Speichern der internal_links für ${item.url}`, { 
+                        error: linksError,
+                        project_id: projectId,
+                        link_count: linkInserts.length
+                    });
+                } else {
+                    log.info(`Erfolgreich ${linkInserts.length} internal_links gespeichert für Projekt ${projectId}`, {
+                        from_page_id: pageData.id,
+                        inserted_count: insertedLinks?.length || 0
+                    });
                 }
             }
         }
