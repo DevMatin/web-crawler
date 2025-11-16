@@ -18,6 +18,22 @@ export interface CrawledItem {
     internal_links_with_anchor?: Array<{ url: string; anchor: string }>;
 }
 
+function normalizeUrl(url: string): string {
+    try {
+        const urlObj = new URL(url);
+        urlObj.hash = '';
+        urlObj.search = '';
+        let pathname = urlObj.pathname;
+        if (pathname.endsWith('/') && pathname.length > 1) {
+            pathname = pathname.slice(0, -1);
+        }
+        urlObj.pathname = pathname;
+        return urlObj.toString();
+    } catch {
+        return url;
+    }
+}
+
 export async function saveToSupabase(
     item: CrawledItem,
     projectId: number
@@ -25,12 +41,14 @@ export async function saveToSupabase(
     try {
         const supabaseClient = getSupabaseClient();
         
+        const normalizedUrl = normalizeUrl(item.url);
+        
         const { data: pageData, error: pageError } = await supabaseClient
             .from('pages')
             .upsert(
                 {
                     project_id: projectId,
-                    url: item.url,
+                    url: normalizedUrl,
                     title: item.title,
                     content_hash: item.content_hash,
                     crawled_at: item.crawled_at,
@@ -47,7 +65,7 @@ export async function saveToSupabase(
             .single();
 
         if (pageError) {
-            log.error(`Supabase Fehler für ${item.url}`, { error: pageError });
+            log.error(`Supabase Fehler für ${normalizedUrl}`, { error: pageError });
             return { success: false, error: pageError.message };
         }
 
@@ -56,11 +74,11 @@ export async function saveToSupabase(
                 .from('pages')
                 .select('id')
                 .eq('project_id', projectId)
-                .eq('url', item.url)
+                .eq('url', normalizedUrl)
                 .single();
             
             if (!existingPage?.id) {
-                log.error(`Konnte page ID nicht finden für ${item.url}`);
+                log.error(`Konnte page ID nicht finden für ${normalizedUrl}`);
                 return { success: false, error: 'Page ID nicht gefunden' };
             }
             pageData.id = existingPage.id;
@@ -85,15 +103,16 @@ export async function saveToSupabase(
             const linkInserts = [];
             
             for (const link of item.internal_links_with_anchor) {
+                const normalizedLinkUrl = normalizeUrl(link.url);
                 const { data: toPage, error: toPageError } = await supabaseClient
                     .from('pages')
                     .select('id, project_id')
                     .eq('project_id', projectId)
-                    .eq('url', link.url)
+                    .eq('url', normalizedLinkUrl)
                     .maybeSingle();
 
                 if (toPageError && toPageError.code !== 'PGRST116') {
-                    log.warning(`Fehler beim Suchen nach to_page für ${link.url}`, { error: toPageError });
+                    log.warning(`Fehler beim Suchen nach to_page für ${normalizedLinkUrl}`, { error: toPageError });
                 }
 
                 if (toPage && toPage.project_id === projectId) {
