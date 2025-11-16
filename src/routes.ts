@@ -93,13 +93,21 @@ router.addDefaultHandler(async ({ enqueueLinks, log, request, $, pushData }) => 
             ? config.allowedDomains 
             : [currentDomain];
         
-        log.info(`Enqueue Links für Domain: ${currentDomain}`, { domainsToCrawl });
-        
-        await enqueueLinks({
-            selector: 'a[href]',
-            baseUrl: url,
-            label: 'default',
+        log.info(`Enqueue Links für Domain: ${currentDomain}`, { 
+            domainsToCrawl, 
+            foundLinks: uniqueLinks.length,
+            links: uniqueLinks.slice(0, 5) 
         });
+        
+        if (uniqueLinks.length > 0) {
+            await enqueueLinks({
+                urls: uniqueLinks,
+                label: 'default',
+            });
+            log.info(`${uniqueLinks.length} Links zur Queue hinzugefügt`);
+        } else {
+            log.warning('Keine internen Links gefunden');
+        }
     } catch (error) {
         log.warning(`Konnte Domain nicht extrahieren für ${request.url}`, { error });
     }
