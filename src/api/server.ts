@@ -17,6 +17,8 @@ if (config.storageDir) {
 
 let sharedDataset: Dataset | null = null;
 
+const runningCrawls = new Map<number, { startTime: Date; urls: string[] }>();
+
 async function getSharedDataset(): Promise<Dataset> {
     if (!sharedDataset) {
         sharedDataset = await Dataset.open();
@@ -93,11 +95,28 @@ app.get('/api/crawl/status', async (req, res) => {
             .limit(1)
             .single();
 
+        const isRunning = runningCrawls.has(projectIdNum);
+        const lastCrawledAt = recentPages?.crawled_at ? new Date(recentPages.crawled_at) : null;
+        const now = new Date();
+        
+        let status: 'pending' | 'running' | 'completed' = 'pending';
+        
+        if (isRunning) {
+            status = 'running';
+        } else if (count && count > 0) {
+            if (lastCrawledAt && (now.getTime() - lastCrawledAt.getTime()) < 300000) {
+                status = 'running';
+            } else {
+                status = 'completed';
+            }
+        }
+
         res.json({
             project_id: projectIdNum,
             total_pages: count || 0,
             last_crawled_at: recentPages?.crawled_at || null,
-            status: count && count > 0 ? 'completed' : 'pending'
+            status,
+            is_running: isRunning
         });
     } catch (error) {
         log.error('Fehler im /api/crawl/status Endpoint', { error });
@@ -201,6 +220,8 @@ app.post('/api/crawl', async (req, res) => {
             project_id: projectIdNum,
         });
 
+        runningCrawls.set(projectIdNum, { startTime: new Date(), urls: startUrls });
+
         (async () => {
             try {
                 log.info('Crawling gestartet', { urls: startUrls, project_id: projectIdNum });
@@ -241,6 +262,9 @@ app.post('/api/crawl', async (req, res) => {
                     error: error instanceof Error ? error.message : String(error),
                     stack: error instanceof Error ? error.stack : undefined
                 });
+            } finally {
+                runningCrawls.delete(projectIdNum);
+                log.info('Crawling-Job beendet', { project_id: projectIdNum });
             }
         })();
     } catch (error) {
